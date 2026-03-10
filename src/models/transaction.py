@@ -30,5 +30,8 @@ class Transaction(BaseModel):
 
 
 class TransactionResponse(BaseModel):
-    id: str
-    status: str = "inserted"
+    status: str                        # "stored" | "rejected" | "duplicate" | "possible_update"
+    id: str | None = None              # set on "stored"
+    reason: str | None = None          # set on "rejected"
+    existing_id: str | None = None     # set on "duplicate" / "possible_update"
+    differences: dict | None = None    # set on "possible_update"

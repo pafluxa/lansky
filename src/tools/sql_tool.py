@@ -2,6 +2,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+import jellyfish
+
 from src import config
 
 
@@ -69,6 +71,39 @@ def fetch_all() -> list[dict[str, Any]]:
             """
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def find_potential_duplicates(
+    date: str,
+    amount: int,
+    merchant: str,
+    direction: str,
+) -> list[dict[str, Any]]:
+    """
+    Return existing transactions with the same date and amount whose merchant
+    name has Jaro-Winkler similarity >= 0.85 against the given merchant.
+    merchant = "to" for direction='out', "from" for direction='in'.
+    """
+    merchant_col = '"to"' if direction == "out" else '"from"'
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, direction, "from", "to", date, time, amount, currency,
+                   has_description, description
+            FROM transactions
+            WHERE date = ? AND amount = ?
+            """,
+            (date, amount),
+        ).fetchall()
+    results = []
+    for r in rows:
+        existing_merchant = r["to"] if direction == "out" else r["from"]
+        similarity = jellyfish.jaro_winkler_similarity(
+            merchant.upper(), existing_merchant.upper()
+        )
+        if similarity >= 0.85:
+            results.append(dict(r))
+    return results
 
 
 def execute_read_query(sql: str) -> list[dict[str, Any]]:

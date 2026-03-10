@@ -19,3 +19,7 @@ SIGMA_AMOUNT: float = 1.0  # log-scale units
 MCP_CODE_EXECUTOR_URL: str = os.environ.get(
     "MCP_CODE_EXECUTOR_URL", "http://code-executor:3333/mcp"
 )
+
+# --- Extended thinking (off by default) ---
+ENABLE_THINKING: bool = os.environ.get("ENABLE_THINKING", "false").lower() == "true"
+THINKING_BUDGET_TOKENS: int = int(os.environ.get("THINKING_BUDGET_TOKENS", "5000"))

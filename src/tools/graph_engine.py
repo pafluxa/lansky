@@ -12,6 +12,7 @@ Pipeline:
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ import community as community_louvain  # python-louvain
 
 from src import config
 from src.tools import sql_tool
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +156,7 @@ def build_graph(nodes: list[TxNode]) -> nx.Graph:
         for j in range(i + 1, len(nodes)):
             scores = composite_similarity(nodes[i], nodes[j])
             G.add_edge(nodes[i].id, nodes[j].id, weight=scores["total"], dims=scores)
+    log.info("GRAPH built  nodes=%d  edges=%d", G.number_of_nodes(), G.number_of_edges())
     return G
 
 
@@ -203,6 +207,16 @@ def detect_partitions(G: nx.Graph, nodes: list[TxNode]) -> list[Partition]:
             support=support,
         ))
 
+    labeled_count = sum(1 for p in partitions if p.label is not None)
+    log.info(
+        "GRAPH partitions=%d  labeled=%d  unlabeled=%d",
+        len(partitions), labeled_count, len(partitions) - labeled_count,
+    )
+    for p in partitions:
+        log.info(
+            "  partition=%d  nodes=%d  label=%r  purity=%.0f%%  support=%d",
+            p.id, len(p.node_ids), p.label, p.purity * 100, p.support,
+        )
     return partitions
 
 
@@ -291,6 +305,10 @@ def classify(
 
     explanation = _explain(candidate, best_partition, avg_dims, label)
 
+    log.info(
+        "GRAPH classify  merchant=%r  → partition=%d  label=%r  confidence=%.3f",
+        candidate.merchant, best_pid, label, confidence,
+    )
     return ClassificationResult(
         tx_id=candidate.id,
         partition_id=best_pid,

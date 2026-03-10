@@ -10,9 +10,9 @@ services:
     healthcheck:
       # 406 = server alive and speaking MCP (plain GET lacks required Accept header)
       test: ["CMD-SHELL", "python3 -c \"import urllib.request,urllib.error\ntry: urllib.request.urlopen('http://localhost:3333/mcp')\nexcept urllib.error.HTTPError as e: exit(0 if e.code==406 else 1)\nexcept: exit(1)\""]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 10
+      retries: 5
       start_period: 10s
 
   lansky:

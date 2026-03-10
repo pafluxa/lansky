@@ -12,6 +12,7 @@ Reactive mode: answers free-form financial queries via SQL and the graph engine.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import AsyncIterator
 
@@ -22,8 +23,30 @@ from pydantic_ai.messages import ModelMessage
 from src import config
 from src.tools import sql_tool, graph_engine
 
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# MCP tool call logger — logs code submitted to the executor and its output
+# ---------------------------------------------------------------------------
+
+async def _log_mcp_tool_call(ctx, call_tool, name: str, args: dict):
+    if name == "execute_python":
+        code = args.get("code", "")
+        log.info("MCP CALL  tool=%s\n--- code ---\n%s\n--- end code ---", name, code)
+    else:
+        log.info("MCP CALL  tool=%s  args=%s", name, args)
+    result = await call_tool(name, args)
+    output = str(result)
+    log.info("MCP RESULT  tool=%s\n--- output ---\n%s\n--- end output ---", name, output)
+    return result
+
+
 # MCP server instance — lifecycle managed by FastAPI lifespan in main.py
-mcp_server = MCPServerStreamableHTTP(config.MCP_CODE_EXECUTOR_URL)
+mcp_server = MCPServerStreamableHTTP(
+    config.MCP_CODE_EXECUTOR_URL,
+    process_tool_call=_log_mcp_tool_call,
+    max_retries=3,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -82,11 +105,21 @@ The user can switch between modes freely. If they're in the middle of categoriza
 """
 
 
+_model_settings = (
+    {"thinking": {"type": "enabled", "budget_tokens": config.THINKING_BUDGET_TOKENS}}
+    if config.ENABLE_THINKING
+    else {}
+)
+
+if config.ENABLE_THINKING:
+    log.info("Extended thinking enabled (budget=%d tokens)", config.THINKING_BUDGET_TOKENS)
+
 agent = Agent(
     config.MODEL,
     deps_type=LanskyDeps,
     system_prompt=SYSTEM_PROMPT,
     toolsets=[mcp_server],
+    model_settings=_model_settings,
 )
 
 
@@ -99,6 +132,7 @@ async def get_uncategorized_transactions(ctx: RunContext[LanskyDeps]) -> str:
     """Return all transactions that have not yet been categorized by the user."""
     rows = sql_tool.fetch_uncategorized()
     if not rows:
+        log.info("TOOL get_uncategorized_transactions → 0 pending")
         return "All transactions are categorized."
     lines = []
     for r in rows:
@@ -107,6 +141,7 @@ async def get_uncategorized_transactions(ctx: RunContext[LanskyDeps]) -> str:
             f"id={r['id']} | {r['direction'].upper()} | {merchant} | "
             f"{r['amount']:,} {r['currency']} | {r['date']}"
         )
+    log.info("TOOL get_uncategorized_transactions → %d pending", len(rows))
     return f"{len(rows)} uncategorized transaction(s):\n" + "\n".join(lines)
 
 
@@ -119,6 +154,7 @@ async def set_description(
     check whether any other uncategorized transactions can now be auto-classified.
     Returns a summary of what was labeled and any auto-classifications triggered.
     """
+    log.info("TOOL set_description  id=%s…  label=%r", transaction_id[:8], description)
     sql_tool.update_description(transaction_id, description)
 
     # Run graph engine to find auto-classifiable pending transactions
@@ -126,10 +162,6 @@ async def set_description(
     auto_labeled: list[str] = []
 
     if pending:
-        nodes = None
-        G = None
-        partitions = None
-        # Lazy-build once and reuse across all pending
         import src.tools.graph_engine as ge
         nodes = ge._load_nodes()
         G = ge.build_graph(nodes)
@@ -140,10 +172,17 @@ async def set_description(
             if result.label is not None:
                 sql_tool.update_description(tx["id"], result.label)
                 merchant = tx["to"] if tx["direction"] == "out" else tx["from"]
+                log.info(
+                    "GRAPH auto-classified  %s  %s → %r  (confidence %.2f)",
+                    merchant, tx["date"], result.label, result.confidence,
+                )
                 auto_labeled.append(
                     f"Auto-classified '{merchant}' on {tx['date']} as '{result.label}' "
                     f"(confidence {result.confidence:.2f}/4.00). {result.explanation}"
                 )
+
+    if not auto_labeled:
+        log.info("GRAPH no auto-classifications triggered")
 
     msg = f"Labeled transaction as '{description}'."
     if auto_labeled:
@@ -161,12 +200,16 @@ async def query_transactions(ctx: RunContext[LanskyDeps], sql_query: str) -> str
       transactions(id, direction, "from", "to", date, time, amount, currency,
                    has_description, description)
     """
+    log.info("TOOL query_transactions\n--- sql ---\n%s\n--- end sql ---", sql_query)
     try:
         rows = sql_tool.execute_read_query(sql_query)
+        log.info("TOOL query_transactions → %d row(s)", len(rows))
         return json.dumps(rows, ensure_ascii=False)
     except ValueError as e:
+        log.warning("TOOL query_transactions  rejected: %s", e)
         return f"Error: {e}"
     except Exception as e:
+        log.error("TOOL query_transactions  failed: %s", e)
         return f"Query failed: {e}"
 
 
@@ -176,15 +219,21 @@ async def classify_transaction(ctx: RunContext[LanskyDeps], transaction_id: str)
     Run the graph engine classifier on a specific transaction and return the
     result including which partition it maps to and the explainability breakdown.
     """
+    log.info("TOOL classify_transaction  id=%s…", transaction_id[:8])
     all_rows = sql_tool.fetch_all()
     target = next((r for r in all_rows if r["id"] == transaction_id), None)
     if target is None:
+        log.warning("TOOL classify_transaction  not found: %s", transaction_id[:8])
         return f"Transaction {transaction_id} not found."
 
     _, result = graph_engine.run(classify_tx=target)
     if result is None:
         return "Could not classify — not enough data."
 
+    log.info(
+        "TOOL classify_transaction → partition=%s  label=%r  confidence=%.3f",
+        result.partition_id, result.label, result.confidence,
+    )
     return (
         f"Partition: {result.partition_id} | Label: {result.label!r} | "
         f"Confidence: {result.confidence:.3f}/4.000\n"
