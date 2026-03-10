@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lansky"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic-ai>=0.0.14",
+    "anthropic>=0.25.0",
+    "networkx>=3.3",
+    "python-louvain>=0.16",
+    "jellyfish>=1.0.3",
+    "aiosqlite>=0.20.0",
+    "httpx>=0.27.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

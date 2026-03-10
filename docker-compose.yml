@@ -1,0 +1,36 @@
+services:
+
+  code-executor:
+    build:
+      context: ./code-executor
+    restart: unless-stopped
+    # Port 3333 is internal only — reachable as http://code-executor:3333 from lansky
+    expose:
+      - "3333"
+    healthcheck:
+      # 406 = server alive and speaking MCP (plain GET lacks required Accept header)
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,urllib.error\ntry: urllib.request.urlopen('http://localhost:3333/mcp')\nexcept urllib.error.HTTPError as e: exit(0 if e.code==406 else 1)\nexcept: exit(1)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  lansky:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - lansky-data:/app/data
+    env_file:
+      - .env
+    environment:
+      # Resolved by Docker's internal DNS — override in .env if needed
+      MCP_CODE_EXECUTOR_URL: ${MCP_CODE_EXECUTOR_URL:-http://code-executor:3333/mcp}
+    depends_on:
+      code-executor:
+        condition: service_healthy
+
+volumes:
+  lansky-data:
