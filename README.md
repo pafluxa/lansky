@@ -1,0 +1,2 @@
+# lansky
+Smart financial assistant.
