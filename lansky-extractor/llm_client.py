@@ -1,12 +1,9 @@
 import json
 import logging
-import sys
-from pathlib import Path
 
 import openai
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.models.extraction import EmailExtractionResult  # noqa: E402
+from models import EmailExtractionResult
 
 import config
 

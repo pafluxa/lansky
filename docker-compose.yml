@@ -32,5 +32,16 @@ services:
       code-executor:
         condition: service_healthy
 
+  extractor:
+    build:
+      context: ./lansky-extractor
+    restart: unless-stopped
+    env_file:
+      - ./lansky-extractor/.env
+    network_mode: host
+    depends_on:
+      lansky:
+        condition: service_started
+
 volumes:
   lansky-data:
