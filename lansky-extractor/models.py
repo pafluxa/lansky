@@ -10,6 +10,7 @@ class ExtractionBase(BaseModel):
     time: str  # HH:MM:SS
     amount: int  # CLP as integer, USD/EUR as cents (×100)
     currency: Literal["CLP", "USD", "EUR"]
+    bank_name: str = "Bank"
 
 
 class ExpenseExtraction(ExtractionBase):

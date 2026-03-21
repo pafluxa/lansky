@@ -33,6 +33,16 @@ _KNOWN_LABELS_PATTERN = re.compile(
 )
 
 
+def detect_bank(html_body: str) -> str:
+    """Detect which bank sent the email from HTML content."""
+    text = html_body.lower()
+    if "bci" in text:
+        return "BCI"
+    if "banco de chile" in text or "bancochile" in text:
+        return "Banco de Chile"
+    return "Bank"
+
+
 def preprocess(html_body: str) -> str:
     soup = BeautifulSoup(html_body, "html.parser")
 

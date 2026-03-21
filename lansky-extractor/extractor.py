@@ -23,8 +23,8 @@ def _process_message(msg, mailbox) -> bool:
         return False
 
     text = preprocessor.preprocess(html_body)
-
-    result = llm_client.extract(text)
+    bank_name = preprocessor.detect_bank(html_body)
+    result = llm_client.extract(text, bank_name=bank_name)
     if result is None:
         log.error("Extraction failed for: %s — will retry next cycle", msg.subject)
         return False

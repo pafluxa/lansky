@@ -96,7 +96,7 @@ def _normalize_amounts(data: dict) -> dict:
     return data
 
 
-def extract(email_text: str) -> EmailExtractionResult | None:
+def extract(email_text: str, bank_name: str = "Bank") -> EmailExtractionResult | None:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": email_text},
@@ -113,6 +113,8 @@ def extract(email_text: str) -> EmailExtractionResult | None:
             raw = response.choices[0].message.content or ""
             parsed = _parse_json(raw)
             normalized = _normalize_amounts(parsed)
+            for tx in normalized.get("transactions", []):
+                tx["bank_name"] = bank_name
             result = EmailExtractionResult.model_validate(normalized)
             log.info("Extracted %d transaction(s) from email", len(result.transactions))
             return result
