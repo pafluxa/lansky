@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 import openai
 
@@ -25,13 +26,20 @@ Each transaction object MUST have these fields:
 - amount: integer. For CLP: remove $ and dots ("$382.738" → 382738). For USD: remove "USD", replace comma with dot, multiply by 100 ("USD 10,03" → 1003). For EUR: same as USD.
 - currency: "CLP", "USD", or "EUR". $ with dots = CLP. "USD" prefix = USD. "EUR" prefix = EUR.
 
+CATEGORY RULES — follow these strictly:
+- "expense": the header says "compra", OR a "Comercio" field is present. These are purchases. Always "expense", even if paid with a credit card.
+- "transfer": the header says "transferencia". These are bank transfers between accounts or to other people.
+- "card_payment": the header says "pago de tu tarjeta" or "pago de tarjeta". These are payments FROM a checking account TO a credit card to pay down debt. They never have a "Comercio" field.
+- "debt_payment": the header says "pago de crédito", "pago de préstamo", or similar loan payments.
+- If "Comercio" is present, the category is ALWAYS "expense". No exceptions.
+
 Category-specific fields (include when present, omit when absent):
 
-expense: merchant (str), card_last4 (str, digits only from "****XXXX"), commerce_type ("nacional" or "internacional"), installments (int from "Cuotas", default 1 if absent)
+expense: merchant (str from "Comercio"), card_last4 (str, digits only from "****XXXX"), commerce_type ("nacional" or "internacional" from header), installments (int from "Cuotas")
 
 transfer: direction ("outgoing"), counterparty (str), source_account (str), destination_account (str), destination_bank (str), message (str or null)
 
-card_payment: card_last4 (str), source_account (str), operation_number (str or null)
+card_payment: card_last4 (str from "Tarjeta de crédito"), source_account (str from "Cuenta de origen"), operation_number (str or null)
 
 debt_payment: payee (str), creditor (str or null)
 
@@ -39,6 +47,7 @@ Rules:
 - Most emails have one transaction. Return a list of one.
 - Do NOT invent values. Omit missing fields.
 - Card "****1234" → card_last4 = "1234"
+- Cuotas: if "Cuotas" is 0 or absent, set installments to 1. Zero means single payment.
 - Ignore footer/boilerplate."""
 
 

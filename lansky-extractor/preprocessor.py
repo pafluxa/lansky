@@ -22,6 +22,9 @@ _KNOWN_LABELS = [
     "Mensaje",
     "Número de comprobante",
     "Nº de operación",
+    "Monto transferido",
+    "Monto pagado",
+    "Fecha de abono",
 ]
 
 _KNOWN_LABELS_PATTERN = re.compile(
@@ -34,7 +37,7 @@ def preprocess(html_body: str) -> str:
     soup = BeautifulSoup(html_body, "html.parser")
 
     header_phrase = _extract_header(soup)
-    pairs = _extract_table_pairs(soup)
+    pairs = _deduplicate(_extract_table_pairs(soup))
 
     if len(pairs) < 2:
         pairs = _extract_text_pairs(soup)
@@ -85,3 +88,14 @@ def _extract_text_pairs(soup: BeautifulSoup) -> list[tuple[str, str]]:
             pairs.append((label, value))
             seen_labels.add(label)
     return pairs
+
+
+def _deduplicate(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Keep the first occurrence of each label only."""
+    seen: set[str] = set()
+    result: list[tuple[str, str]] = []
+    for label, value in pairs:
+        if label not in seen:
+            seen.add(label)
+            result.append((label, value))
+    return result
