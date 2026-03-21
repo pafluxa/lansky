@@ -74,7 +74,7 @@ MCP_CODE_EXECUTOR_URL=...           # URL of existing MCP code executor containe
 
 ## Deployment
 
-This runs in Docker on the local workstation (hostname: haddock).
+This runs in Docker on the local workstation (hostname: <your-host>).
 
 ### Dockerfile
 
@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 CREATE TABLE IF NOT EXISTS instruments (
-    id TEXT PRIMARY KEY,             -- e.g. "cc:2722", "loan:hipotecario"
+    id TEXT PRIMARY KEY,             -- e.g. "cc:1234", "loan:hipotecario"
     type TEXT NOT NULL CHECK(type IN ('credit_card', 'loan', 'mortgage')),
     label TEXT NOT NULL,             -- e.g. "BCI Visa 2722"
     limit_clp INTEGER,               -- credit limit in CLP (credit cards only)

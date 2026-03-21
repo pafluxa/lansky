@@ -3,3 +3,5 @@ __pycache__
 .env
 lansky.db
 .git
+CLAUDE.md
+MEMORY.md

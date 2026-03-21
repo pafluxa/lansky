@@ -47,21 +47,21 @@ def to_transaction(record: dict) -> dict | None:
     elif category == "transfer":
         if data.get("direction") == "outgoing":
             direction = "out"
-            from_ = f"Banco de Chile {data.get('source_account') or ''}".strip()
+            from_ = f"BCI {data.get('source_account') or ''}".strip()
             to = data.get("counterparty") or "unknown"
         else:
             direction = "in"
             from_ = data.get("counterparty") or "unknown"
-            to = f"Banco de Chile {data.get('destination_account') or ''}".strip()
+            to = f"BCI {data.get('destination_account') or ''}".strip()
 
     elif category == "billing":
         direction = "out"
-        from_ = "Banco de Chile"
+        from_ = "BCI"
         to = data.get("payee") or "unknown"
 
     elif category == "debt_payment":
         direction = "out"
-        from_ = "Banco de Chile"
+        from_ = "BCI"
         to = data.get("payee") or data.get("creditor") or "unknown"
 
     else:

@@ -339,7 +339,7 @@ async def create_instrument(
     limit_usd: int = 0,
 ) -> str:
     """Create a new financial instrument (credit card, loan, or mortgage).
-    Example: id='cc:2722', type='credit_card', label='BCI Visa 2722',
+    Example: id='cc:1234', type='credit_card', label='BCI Visa 1234',
     limit_clp=3000000."""
     existing = sql_tool.fetch_instrument(id)
     if existing:
