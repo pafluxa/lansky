@@ -4,11 +4,9 @@ services:
     build:
       context: ./code-executor
     restart: unless-stopped
-    # Port 3333 is internal only — reachable as http://code-executor:3333 from lansky
     expose:
       - "3333"
     healthcheck:
-      # 406 = server alive and speaking MCP (plain GET lacks required Accept header)
       test: ["CMD-SHELL", "python3 -c \"import urllib.request,urllib.error\ntry: urllib.request.urlopen('http://localhost:3333/mcp')\nexcept urllib.error.HTTPError as e: exit(0 if e.code==406 else 1)\nexcept: exit(1)\""]
       interval: 30s
       timeout: 3s
@@ -26,11 +24,52 @@ services:
     env_file:
       - .env
     environment:
-      # Resolved by Docker's internal DNS — override in .env if needed
       MCP_CODE_EXECUTOR_URL: ${MCP_CODE_EXECUTOR_URL:-http://code-executor:3333/mcp}
     depends_on:
       code-executor:
         condition: service_healthy
+
+  llm-server:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    restart: unless-stopped
+    expose:
+      - "8081"
+    volumes:
+      - llm-models:/root/.cache
+    environment:
+      LLAMA_MODEL: ${LLAMA_MODEL:-Qwen/Qwen3-8B-GGUF:Q4_K_M}
+    entrypoint:
+      - /llama-server
+      - --hf
+      - ${LLAMA_MODEL:-Qwen/Qwen3-8B-GGUF:Q4_K_M}
+      - --jinja
+      - --temp
+      - "0.0"
+      - -ngl
+      - "99"
+      - -fa
+      - -c
+      - "4096"
+      - -n
+      - "2048"
+      - --no-context-shift
+      - --port
+      - "8081"
+      - --host
+      - "0.0.0.0"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
   extractor:
     build:
@@ -38,10 +77,15 @@ services:
     restart: unless-stopped
     env_file:
       - ./lansky-extractor/.env
-    network_mode: host
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-server:8081/v1}
+      LANSKY_API_URL: ${LANSKY_API_URL:-http://lansky:8000}
     depends_on:
       lansky:
         condition: service_started
+      llm-server:
+        condition: service_healthy
 
 volumes:
   lansky-data:
+  llm-models:
