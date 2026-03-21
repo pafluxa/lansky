@@ -1,0 +1,5 @@
+imap_tools
+beautifulsoup4
+httpx
+pydantic>=2.0
+openai>=1.0
