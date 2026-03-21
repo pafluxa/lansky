@@ -15,6 +15,20 @@ import config
 log = logging.getLogger(__name__)
 
 
+def _instrument_exists(instrument_id: str) -> bool:
+    """Check if an instrument is registered in Lansky."""
+    try:
+        response = httpx.get(
+            f"{config.LANSKY_API_URL}/api/instruments",
+            timeout=5.0,
+        )
+        response.raise_for_status()
+        instruments = response.json()
+        return any(i["id"] == instrument_id for i in instruments)
+    except Exception:
+        return False
+
+
 def push(extraction: Extraction) -> dict | None:
     payload = _build_transaction_payload(extraction)
     try:
@@ -31,9 +45,17 @@ def push(extraction: Extraction) -> dict | None:
         return tx_response
 
     if isinstance(extraction, ExpenseExtraction) and extraction.card_last4 is not None:
-        _push_debt_item(extraction, tx_id)
+        instrument_id = f"cc:{extraction.card_last4}"
+        if _instrument_exists(instrument_id):
+            _push_debt_item(extraction, tx_id)
+        else:
+            log.debug("Instrument %s not registered, skipping debt item.", instrument_id)
     elif isinstance(extraction, CardPaymentExtraction):
-        _push_payment(extraction, tx_id)
+        instrument_id = f"cc:{extraction.card_last4}"
+        if _instrument_exists(instrument_id):
+            _push_payment(extraction, tx_id)
+        else:
+            log.debug("Instrument %s not registered, skipping payment.", instrument_id)
 
     return tx_response
 
@@ -82,11 +104,7 @@ def _push_debt_item(e: ExpenseExtraction, tx_id: str) -> None:
     try:
         resp = _post(f"{config.LANSKY_API_URL}/api/debt_items", payload)
         if resp.get("status") == "rejected":
-            log.warning(
-                "Instrument %s not registered. Debt item not created. "
-                "Register it via Lansky chat.",
-                instrument_id,
-            )
+            log.error("Debt item rejected for %s: %s", instrument_id, resp.get("reason"))
     except httpx.HTTPError as exc:
         log.error("Failed to POST debt_item for tx %s: %s", tx_id, exc)
 
@@ -103,11 +121,7 @@ def _push_payment(e: CardPaymentExtraction, tx_id: str) -> None:
     try:
         resp = _post(f"{config.LANSKY_API_URL}/api/payments", payload)
         if resp.get("status") == "rejected":
-            log.warning(
-                "Instrument %s not registered. Payment not created. "
-                "Register it via Lansky chat.",
-                instrument_id,
-            )
+            log.error("Payment rejected for %s: %s", instrument_id, resp.get("reason"))
     except httpx.HTTPError as exc:
         log.error("Failed to POST payment for tx %s: %s", tx_id, exc)
 
