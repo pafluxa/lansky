@@ -1,5 +1,6 @@
+from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TransactionRequest(BaseModel):
@@ -12,6 +13,24 @@ class TransactionRequest(BaseModel):
     currency: Literal["CLP", "USD", "EUR"]
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: str) -> str:
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(f"invalid date format, expected YYYY-MM-DD: {v!r}")
+        return v
+
+    @field_validator("time")
+    @classmethod
+    def validate_time(cls, v: str) -> str:
+        try:
+            datetime.strptime(v, "%H:%M:%S")
+        except ValueError:
+            raise ValueError(f"invalid time format, expected HH:MM:SS: {v!r}")
+        return v
 
 
 class Transaction(BaseModel):
@@ -30,7 +49,7 @@ class Transaction(BaseModel):
 
 
 class TransactionResponse(BaseModel):
-    status: str                        # "stored" | "rejected" | "duplicate" | "possible_update"
+    status: Literal["stored", "rejected", "duplicate", "possible_update"]
     id: str | None = None              # set on "stored"
     reason: str | None = None          # set on "rejected"
     existing_id: str | None = None     # set on "duplicate" / "possible_update"
