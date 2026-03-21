@@ -23,7 +23,7 @@ Each transaction object MUST have these fields:
 - category: one of "expense", "transfer", "card_payment", "debt_payment"
 - date: YYYY-MM-DD format. Convert from DD/MM/YYYY or DD/MM/YY. Two-digit years: assume 20XX.
 - time: HH:MM:SS format. If only HH:MM, append :00. If absent, use "00:00:00".
-- amount: integer. For CLP: remove $ and dots ("$382.738" → 382738). For USD: remove "USD", replace comma with dot, multiply by 100 ("USD 10,03" → 1003). For EUR: same as USD.
+- amount_raw: string. Copy the amount EXACTLY as it appears in the email, including currency symbols, dots, commas, and prefixes. Examples: "$382.738", "USD 10,03", "$22.700", "USD 5,96". Do NOT convert, calculate, or remove any characters.
 - currency: "CLP", "USD", or "EUR". $ with dots = CLP. "USD" prefix = USD. "EUR" prefix = EUR.
 
 CATEGORY RULES — follow these strictly:
@@ -51,6 +51,51 @@ Rules:
 - Ignore footer/boilerplate."""
 
 
+def _normalize_amounts(data: dict) -> dict:
+    """Convert amount_raw (str) → amount (int) for each transaction.
+
+    Chilean conventions:
+      CLP: dots are thousands separators, no decimals.
+        "$382.738" → 382738
+        "$22.700"  → 22700
+      USD/EUR: commas are decimal separators (2 decimal places),
+        dots are optional thousands separators.
+        Stored as cents (×100).
+        "USD 10,03" → 1003
+        "USD 5,96"  → 596
+        "EUR 1.250,00" → 125000
+    """
+    for tx in data.get("transactions", []):
+        raw = tx.pop("amount_raw", None)
+        if raw is None:
+            # Fallback: if LLM already returned "amount" as int, keep it
+            continue
+
+        currency = tx.get("currency", "CLP")
+
+        # Strip currency prefix and whitespace
+        cleaned = raw.strip()
+        for prefix in ("USD", "EUR", "$", "CLP"):
+            cleaned = cleaned.replace(prefix, "")
+        cleaned = cleaned.strip()
+
+        if currency == "CLP":
+            # Dots are thousands separators, no decimals
+            cleaned = cleaned.replace(".", "")
+            cleaned = cleaned.replace(",", "")  # safety
+            tx["amount"] = int(cleaned)
+        else:
+            # USD/EUR: dots are thousands, commas are decimals
+            # "1.250,00" → "1250.00" → 1250.00 → 125000
+            # "10,03" → "10.03" → 10.03 → 1003
+            # "5,96" → "5.96" → 5.96 → 596
+            cleaned = cleaned.replace(".", "")   # remove thousands dots
+            cleaned = cleaned.replace(",", ".")  # comma → decimal point
+            tx["amount"] = round(float(cleaned) * 100)
+
+    return data
+
+
 def extract(email_text: str) -> EmailExtractionResult | None:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -67,7 +112,8 @@ def extract(email_text: str) -> EmailExtractionResult | None:
             )
             raw = response.choices[0].message.content or ""
             parsed = _parse_json(raw)
-            result = EmailExtractionResult.model_validate(parsed)
+            normalized = _normalize_amounts(parsed)
+            result = EmailExtractionResult.model_validate(normalized)
             log.info("Extracted %d transaction(s) from email", len(result.transactions))
             return result
         except Exception as exc:
