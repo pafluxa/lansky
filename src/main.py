@@ -10,7 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src import config
+from src.tools import sql_tool
 from src.models.transaction import TransactionRequest, TransactionResponse
+from src.models.debt import (
+    InstrumentRequest, InstrumentResponse,
+    DebtItemRequest, DebtItemResponse,
+    PaymentRequest, PaymentResponse,
+)
 from src.agents import transaction as transaction_agent
 from src.agents import conversation as conversation_agent
 
@@ -60,12 +66,49 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 """
 
+CREATE_INSTRUMENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS instruments (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL CHECK(type IN ('credit_card', 'loan', 'mortgage')),
+    label TEXT NOT NULL,
+    limit_clp INTEGER,
+    limit_usd INTEGER
+);
+"""
+
+CREATE_DEBT_ITEMS_TABLE = """
+CREATE TABLE IF NOT EXISTS debt_items (
+    id TEXT PRIMARY KEY,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id),
+    instrument_id TEXT NOT NULL REFERENCES instruments(id),
+    total_amount INTEGER NOT NULL,
+    currency TEXT NOT NULL CHECK(currency IN ('CLP', 'USD', 'EUR', 'UF')),
+    installments INTEGER NOT NULL DEFAULT 1,
+    installment_amt INTEGER NOT NULL,
+    purchase_date TEXT NOT NULL
+);
+"""
+
+CREATE_PAYMENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id),
+    instrument_id TEXT NOT NULL REFERENCES instruments(id),
+    amount INTEGER NOT NULL,
+    currency TEXT NOT NULL CHECK(currency IN ('CLP', 'USD', 'EUR', 'UF')),
+    payment_date TEXT NOT NULL
+);
+"""
+
 
 def init_db() -> None:
     db_path = Path(config.SQLITE_DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
         conn.execute(CREATE_TRANSACTIONS_TABLE)
+        conn.execute(CREATE_INSTRUMENTS_TABLE)
+        conn.execute(CREATE_DEBT_ITEMS_TABLE)
+        conn.execute(CREATE_PAYMENTS_TABLE)
         conn.commit()
     log.info("DB ready: %s", db_path)
 
@@ -130,3 +173,88 @@ async def chat(req: ChatRequest):
 @app.post("/api/transactions", response_model=TransactionResponse)
 async def post_transaction(req: TransactionRequest) -> TransactionResponse:
     return await transaction_agent.ingest(req)
+
+
+# ---------------------------------------------------------------------------
+# Instruments
+# ---------------------------------------------------------------------------
+
+@app.post("/api/instruments", response_model=InstrumentResponse)
+async def post_instrument(req: InstrumentRequest) -> InstrumentResponse:
+    existing = sql_tool.fetch_instrument(req.id)
+    if existing:
+        return InstrumentResponse(status="already_exists", id=req.id)
+    sql_tool.insert_instrument(req.id, req.type, req.label, req.limit_clp, req.limit_usd)
+    return InstrumentResponse(status="created", id=req.id)
+
+
+@app.get("/api/instruments")
+async def get_instruments():
+    return sql_tool.fetch_instruments()
+
+
+# ---------------------------------------------------------------------------
+# Debt items
+# ---------------------------------------------------------------------------
+
+@app.post("/api/debt_items", response_model=DebtItemResponse)
+async def post_debt_item(req: DebtItemRequest) -> DebtItemResponse:
+    if not sql_tool.fetch_instrument(req.instrument_id):
+        return DebtItemResponse(
+            status="rejected",
+            reason=f"instrument not found: {req.instrument_id}",
+        )
+    item_id = sql_tool.insert_debt_item(
+        req.transaction_id,
+        req.instrument_id,
+        req.total_amount,
+        req.currency,
+        req.installments,
+        req.installment_amt,
+        req.purchase_date,
+    )
+    log.info(
+        "DEBT_ITEM %s %s %s %sx %s",
+        req.instrument_id, req.total_amount, req.currency,
+        req.installments, req.purchase_date,
+    )
+    return DebtItemResponse(status="created", id=item_id)
+
+
+# ---------------------------------------------------------------------------
+# Payments
+# ---------------------------------------------------------------------------
+
+@app.post("/api/payments", response_model=PaymentResponse)
+async def post_payment(req: PaymentRequest) -> PaymentResponse:
+    if not sql_tool.fetch_instrument(req.instrument_id):
+        return PaymentResponse(status="rejected", reason="instrument not found")
+    payment_id = sql_tool.insert_payment(
+        req.transaction_id,
+        req.instrument_id,
+        req.amount,
+        req.currency,
+        req.payment_date,
+    )
+    log.info(
+        "PAYMENT %s %s %s %s",
+        req.instrument_id, req.amount, req.currency, req.payment_date,
+    )
+    return PaymentResponse(status="created", id=payment_id)
+
+
+# ---------------------------------------------------------------------------
+# Dev utilities
+# ---------------------------------------------------------------------------
+
+@app.delete("/api/transactions")
+async def reset_transactions():
+    """Wipe all transactions and reset conversation history. Dev/demo use only."""
+    db_path = Path(config.SQLITE_DB_PATH)
+    with sqlite3.connect(db_path) as conn:
+        n = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        conn.execute("DELETE FROM transactions")
+        conn.commit()
+    conversation_agent.reset_history()
+    log.info("RESET: deleted %d transactions, cleared chat history", n)
+    return {"deleted": n}

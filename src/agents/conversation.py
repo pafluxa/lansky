@@ -102,6 +102,11 @@ The user can switch between modes freely. If they're in the middle of categoriza
 - Keep responses short. This is a chat, not an essay.
 - Currency amounts: CLP has no decimals. USD and EUR use two decimals.
 - You understand Spanish and English. Match the user's language.
+- You can help the user manage their financial instruments (credit cards, loans, mortgages) using the create_instrument tool. When the user mentions a card, loan, or mortgage, offer to register it.
+- You can query active installment debt, period balances, total debt, and available credit using the debt tools.
+- For currency conversion, the convert_currency tool exists but is not yet functional. Let the user know it's coming soon.
+- When reporting debt amounts, always include the instrument label (not just the ID) and the currency.
+- UF (Unidad de Fomento) is a Chilean inflation-indexed unit used for mortgages and some loans. 1 UF ≈ 38,000 CLP (varies daily).
 """
 
 
@@ -239,6 +244,127 @@ async def classify_transaction(ctx: RunContext[LanskyDeps], transaction_id: str)
         f"Confidence: {result.confidence:.3f}/4.000\n"
         f"Dimension scores: {result.dim_scores}\n"
         f"Explanation: {result.explanation}"
+    )
+
+
+@agent.tool
+async def query_active_debt(ctx: RunContext[LanskyDeps], instrument_id: str = "") -> str:
+    """Return all active debt items (installment purchases and loans
+    with remaining payments). Optionally filter by instrument_id.
+    Shows remaining installments and monthly obligation."""
+    filt = instrument_id if instrument_id else None
+    rows = sql_tool.fetch_active_debt(instrument_id=filt)
+    if not rows:
+        return "No active debt items found."
+    lines = []
+    for r in rows:
+        lines.append(
+            f"instrument={r['instrument_label']} | "
+            f"amount={r['total_amount']:,} {r['currency']} | "
+            f"installments={r['installments']} | "
+            f"monthly={r['installment_amt']:,} | "
+            f"remaining={r['remaining']} | "
+            f"purchase={r['purchase_date']}"
+        )
+    log.info("TOOL query_active_debt → %d active items", len(rows))
+    return f"{len(rows)} active debt item(s):\n" + "\n".join(lines)
+
+
+@agent.tool
+async def query_period_balance(
+    ctx: RunContext[LanskyDeps], instrument_id: str, year: int, month: int
+) -> str:
+    """Compute the balance for a specific instrument in a given month:
+    total installments due minus total payments made. Positive balance
+    means money still owed."""
+    result = sql_tool.compute_period_balance(instrument_id, year, month)
+    log.info(
+        "TOOL query_period_balance  %s  %d-%02d → debt=%d pay=%d bal=%d",
+        instrument_id, year, month,
+        result["period_debt"], result["period_payments"], result["balance"],
+    )
+    return (
+        f"Period {year}-{month:02d} for {instrument_id}:\n"
+        f"  Installments due: {result['period_debt']:,} {result['currency']}\n"
+        f"  Payments made:    {result['period_payments']:,} {result['currency']}\n"
+        f"  Balance:          {result['balance']:,} {result['currency']}"
+    )
+
+
+@agent.tool
+async def query_total_debt(ctx: RunContext[LanskyDeps], instrument_id: str = "") -> str:
+    """Return total outstanding debt (remaining installments × monthly
+    amount) across all instruments or a specific one."""
+    filt = instrument_id if instrument_id else None
+    rows = sql_tool.compute_total_debt(instrument_id=filt)
+    if not rows:
+        return "No outstanding debt."
+    lines = []
+    for r in rows:
+        lines.append(
+            f"{r['instrument_label']}: "
+            f"{r['total_outstanding']:,} {r['currency']}"
+        )
+    total = sum(r["total_outstanding"] for r in rows)
+    log.info("TOOL query_total_debt → %d instrument(s), total=%d", len(rows), total)
+    return "\n".join(lines) + f"\n\nTotal: {total:,}"
+
+
+@agent.tool
+async def query_available_credit(ctx: RunContext[LanskyDeps], instrument_id: str) -> str:
+    """Return available credit for a credit card: cupo minus
+    total outstanding debt on that instrument."""
+    result = sql_tool.compute_available_credit(instrument_id)
+    if result is None:
+        return f"Instrument {instrument_id} not found or has no credit limit."
+    log.info(
+        "TOOL query_available_credit  %s → limit=%d outstanding=%d available=%d",
+        instrument_id, result["limit"], result["outstanding"], result["available"],
+    )
+    return (
+        f"{result['label']}:\n"
+        f"  Credit limit:  {result['limit']:,} {result['currency']}\n"
+        f"  Outstanding:   {result['outstanding']:,} {result['currency']}\n"
+        f"  Available:     {result['available']:,} {result['currency']}"
+    )
+
+
+@agent.tool
+async def create_instrument(
+    ctx: RunContext[LanskyDeps],
+    id: str,
+    type: str,
+    label: str,
+    limit_clp: int = 0,
+    limit_usd: int = 0,
+) -> str:
+    """Create a new financial instrument (credit card, loan, or mortgage).
+    Example: id='cc:2722', type='credit_card', label='BCI Visa 2722',
+    limit_clp=3000000."""
+    existing = sql_tool.fetch_instrument(id)
+    if existing:
+        return f"Instrument {id} already exists: {existing['label']}"
+    sql_tool.insert_instrument(
+        id=id, type_=type, label=label,
+        limit_clp=limit_clp or None, limit_usd=limit_usd or None,
+    )
+    log.info("TOOL create_instrument  %s  %s  %s", id, type, label)
+    return f"Created instrument: {id} ({label})"
+
+
+@agent.tool
+async def convert_currency(
+    ctx: RunContext[LanskyDeps], amount: int, from_currency: str, to_currency: str
+) -> str:
+    """Convert between CLP, USD, EUR, and UF. Currently a placeholder
+    — returns an explanation that the tool is not yet connected to
+    live exchange rate data."""
+    return (
+        f"Currency conversion ({amount:,} {from_currency} → {to_currency}) "
+        f"is not yet available. To implement this, Lansky needs:\n"
+        f"• UF ↔ CLP: daily UF value from CMF API (api.cmfchile.cl)\n"
+        f"• CLP ↔ USD/EUR: exchange rates from SII or a forex API\n"
+        f"This tool is a placeholder for future implementation."
     )
 
 
