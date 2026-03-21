@@ -74,7 +74,7 @@ curl -X POST http://localhost:8000/api/transactions \
   -H "Content-Type: application/json" \
   -d '{
     "direction": "out",
-    "from": "BCI Cuenta 32648855",
+    "from": "BCI Cuenta 00123456789",
     "to": "APPLE.COM/BILL",
     "date": "2026-03-16",
     "time": "18:15:00",
@@ -90,7 +90,7 @@ python blast_transactions.py --url http://localhost:8000 --limit 50
 
 In the chat, tell Lansky about your credit cards:
 
-> "I have a BCI credit card ending in 2722 with a cupo of 3 million CLP"
+> "I have a BCI credit card ending in 1234 with a "cupo" of 1 million CLP"
 
 Lansky will create the instrument. Future purchases on that card will automatically track installments and payments.
 
