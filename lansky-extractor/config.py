@@ -4,7 +4,11 @@ IMAP_HOST: str = os.environ.get("IMAP_HOST", "imap.mail.me.com")
 IMAP_USER: str = os.environ.get("IMAP_USER", "")
 IMAP_PASSWORD: str = os.environ.get("IMAP_PASSWORD", "")
 IMAP_FOLDER: str = os.environ.get("IMAP_FOLDER", "INBOX")
-BCI_SENDER: str = os.environ.get("BCI_SENDER", "")
+BANK_SENDERS: list[str] = [
+    s.strip() for s in
+    os.environ.get("BANK_SENDERS", "").split(",")
+    if s.strip()
+]
 
 LLM_BASE_URL: str = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8081/v1")
 LLM_MODEL: str = os.environ.get("LLM_MODEL", "qwen3-8b")

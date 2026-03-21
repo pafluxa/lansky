@@ -44,20 +44,20 @@ def push(extraction: Extraction) -> dict | None:
 def _build_transaction_payload(e: Extraction) -> dict:
     if isinstance(e, ExpenseExtraction):
         direction = "out"
-        from_ = f"BCI CC {e.card_last4}" if e.card_last4 else "BCI"
+        from_ = f"CC {e.card_last4}" if e.card_last4 else "Bank"
         to = e.merchant
     elif isinstance(e, TransferExtraction):
         direction = "out" if e.direction == "outgoing" else "in"
-        from_ = f"BCI Cuenta {e.source_account}" if e.source_account else "BCI"
+        from_ = f"Cuenta {e.source_account}" if e.source_account else "Bank"
         to = e.counterparty
     elif isinstance(e, CardPaymentExtraction):
         direction = "out"
-        from_ = f"BCI Cuenta {e.source_account}" if e.source_account else "BCI"
-        to = f"BCI CC {e.card_last4}"
+        from_ = f"Cuenta {e.source_account}" if e.source_account else "Bank"
+        to = f"CC {e.card_last4}"
     else:
         assert isinstance(e, DebtPaymentExtraction)
         direction = "out"
-        from_ = "BCI"
+        from_ = "Bank"
         to = e.payee
 
     return {

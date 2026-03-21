@@ -17,7 +17,7 @@ client = openai.OpenAI(
     api_key="local",
 )
 
-SYSTEM_PROMPT = """You extract financial transactions from Chilean bank (BCI) notification emails.
+SYSTEM_PROMPT = """You extract financial transactions from Chilean bank notification emails (BCI, Banco de Chile, and others).
 
 Return ONLY a JSON object with this schema: {"transactions": [<transaction>, ...]}
 
@@ -41,7 +41,7 @@ debt_payment: payee (str), creditor (str or null)
 Rules:
 - Most emails have one transaction. Return a list of one.
 - Do NOT invent values. Omit missing fields.
-- Card "****2722" → card_last4 = "2722"
+- Card "****1234" → card_last4 = "1234"
 - Ignore footer/boilerplate."""
 
 
