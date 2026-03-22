@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE_INSTRUMENTS_TABLE = """
 CREATE TABLE IF NOT EXISTS instruments (
     id TEXT PRIMARY KEY,
-    type TEXT NOT NULL CHECK(type IN ('credit_card', 'loan', 'mortgage')),
+    type TEXT NOT NULL CHECK(type IN ('credit_card', 'debit_card', 'checking', 'savings', 'loan', 'mortgage')),
     label TEXT NOT NULL,
     limit_clp INTEGER,
     limit_usd INTEGER

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 class InstrumentRequest(BaseModel):
     id: str
-    type: Literal["credit_card", "loan", "mortgage"]
+    type: Literal["credit_card", "debit_card", "checking", "savings", "loan", "mortgage"]
     label: str
     limit_clp: int | None = None
     limit_usd: int | None = None

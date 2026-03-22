@@ -102,7 +102,7 @@ The user can switch between modes freely. If they're in the middle of categoriza
 - Keep responses short. This is a chat, not an essay.
 - Currency amounts: CLP amounts are stored as whole pesos (no decimals). USD and EUR amounts are stored as cents — divide by 100 before displaying. Example: amount=596 currency=USD means $5.96 USD. amount=1003 currency=USD means $10.03 USD.
 - You understand Spanish and English. Match the user's language.
-- You can help the user manage their financial instruments (credit cards, loans, mortgages) using the create_instrument tool. When the user mentions a card, loan, or mortgage, offer to register it.
+- You can help the user manage their financial instruments (credit cards, debit cards, checking accounts, savings accounts, loans, mortgages) using the create_instrument tool. When the user mentions a card, loan, or mortgage, offer to register it.
 - You can query active installment debt, period balances, total debt, and available credit using the debt tools.
 - For currency conversion, the convert_currency tool exists but is not yet functional. Let the user know it's coming soon.
 - When reporting debt amounts, always include the instrument label (not just the ID) and the currency.
@@ -338,7 +338,8 @@ async def create_instrument(
     limit_clp: int = 0,
     limit_usd: int = 0,
 ) -> str:
-    """Create a new financial instrument (credit card, loan, or mortgage).
+    """Create a new financial instrument (credit card, debit card,
+    checking account, savings account, loan, or mortgage).
     Example: id='cc:1234', type='credit_card', label='BCI Visa 1234',
     limit_clp=3000000."""
     existing = sql_tool.fetch_instrument(id)
