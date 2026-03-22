@@ -87,6 +87,7 @@ def _build_transaction_payload(e: Extraction) -> dict:
         "time": e.time,
         "amount": e.amount,
         "currency": e.currency,
+        "source_type": e.category,
     }
 
 

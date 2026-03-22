@@ -25,14 +25,15 @@ def insert_transaction(
     time: str,
     amount: int,
     currency: str,
+    source_type: str = "manual",
 ) -> None:
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO transactions (id, direction, "from", "to", date, time, amount, currency)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO transactions (id, direction, "from", "to", date, time, amount, currency, source_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (id, direction, from_, to, date, time, amount, currency),
+            (id, direction, from_, to, date, time, amount, currency, source_type),
         )
         conn.commit()
 
@@ -54,7 +55,7 @@ def fetch_uncategorized() -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, direction, "from", "to", date, time, amount, currency
+            SELECT id, direction, "from", "to", date, time, amount, currency, source_type
             FROM transactions
             WHERE has_description = 0
             ORDER BY date DESC, time DESC
@@ -68,7 +69,7 @@ def fetch_all() -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT id, direction, "from", "to", date, time, amount, currency,
-                   has_description, description
+                   source_type, has_description, description
             FROM transactions
             ORDER BY date DESC, time DESC
             """

@@ -87,7 +87,7 @@ Keep category prompts concise. Do not lecture the user about budgeting or offer 
 
 When the user asks a question about their finances (instead of responding to a categorization prompt), switch to reactive mode:
 
-1. Use the SQL tool to query the transactions table. Write correct SQL — remember the column names: id, direction, "from", "to", date, time, amount, currency, has_description, description.
+1. Use the SQL tool to query the transactions table. Write correct SQL — remember the column names: id, direction, "from", "to", date, time, amount, currency, source_type, has_description, description. The source_type column indicates the transaction type: 'expense', 'transfer', 'card_payment', 'debt_payment', or 'manual'.
 2. If the query requires computation (aggregation, trends, comparisons), use the SQL tool for aggregation when possible. For complex analysis, use the MCP code executor to run Python.
 3. Present results clearly. Use actual numbers. Do not hedge or add unnecessary caveats.
 4. If the user's question is ambiguous, ask ONE clarifying question, then answer.
@@ -143,7 +143,7 @@ async def get_uncategorized_transactions(ctx: RunContext[LanskyDeps]) -> str:
     for r in rows:
         merchant = r["to"] if r["direction"] == "out" else r["from"]
         lines.append(
-            f"id={r['id']} | {r['direction'].upper()} | {merchant} | "
+            f"id={r['id']} | {r['direction'].upper()} | {r.get('source_type', 'manual')} | {merchant} | "
             f"{r['amount']:,} {r['currency']} | {r['date']}"
         )
     log.info("TOOL get_uncategorized_transactions → %d pending", len(rows))
@@ -203,7 +203,7 @@ async def query_transactions(ctx: RunContext[LanskyDeps], sql_query: str) -> str
 
     Schema:
       transactions(id, direction, "from", "to", date, time, amount, currency,
-                   has_description, description)
+                   source_type, has_description, description)
     """
     log.info("TOOL query_transactions\n--- sql ---\n%s\n--- end sql ---", sql_query)
     try:

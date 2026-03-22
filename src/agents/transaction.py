@@ -71,6 +71,7 @@ async def ingest(req: TransactionRequest) -> TransactionResponse:
         time=req.time,
         amount=req.amount,
         currency=req.currency,
+        source_type=req.source_type,
     )
     log.info(
         "INGEST %s  %s  %s  %d %s  %s",

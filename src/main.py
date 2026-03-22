@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     time TEXT NOT NULL,
     amount INTEGER NOT NULL,
     currency TEXT NOT NULL CHECK(currency IN ('CLP', 'USD', 'EUR')),
+    source_type TEXT NOT NULL DEFAULT 'manual' CHECK(source_type IN ('expense', 'transfer', 'card_payment', 'debt_payment', 'manual')),
     has_description INTEGER NOT NULL DEFAULT 0,
     description TEXT DEFAULT NULL
 );

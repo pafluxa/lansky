@@ -11,6 +11,7 @@ class TransactionRequest(BaseModel):
     time: str  # HH:MM:SS
     amount: int
     currency: Literal["CLP", "USD", "EUR"]
+    source_type: Literal["expense", "transfer", "card_payment", "debt_payment", "manual"] = "manual"
 
     model_config = {"populate_by_name": True}
 
@@ -42,6 +43,7 @@ class Transaction(BaseModel):
     time: str
     amount: int
     currency: Literal["CLP", "USD", "EUR"]
+    source_type: Literal["expense", "transfer", "card_payment", "debt_payment", "manual"] = "manual"
     has_description: bool
     description: str | None
 
